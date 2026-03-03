@@ -31,11 +31,29 @@ After deployment, call the proxy instead of CTIX directly. Replace your CTIX bas
 
 Supported methods: `GET`, `POST`, `PUT`, `DELETE`. Request body and query parameters are forwarded; auth params are added automatically.
 
-## Deploy
+## Deploy on Vercel
+
+### Option 1: Vercel CLI
 
 ```bash
-cd ctix-proxy
-vercel
+cd vercel-proxy
+npx vercel
 ```
 
-Or connect the repo to Vercel and deploy from the dashboard.
+Follow the prompts (link to existing project or create new). For production:
+
+```bash
+npx vercel --prod
+```
+
+### Option 2: Connect Git (GitHub/GitLab/Bitbucket)
+
+1. Push this folder to a Git repo.
+2. Go to [vercel.com](https://vercel.com) → **Add New** → **Project**.
+3. Import the repo; set **Root Directory** to `vercel-proxy` (if the repo root is the parent).
+4. In **Settings → Environment Variables**, add `CTIX_API_URL`, `CTIX_ACCESS_ID`, `CTIX_SECRET_KEY`.
+5. Deploy.
+
+### After deploy
+
+Set **Framework Preset** to **Other** in **Settings → General** so Vercel doesn’t treat the project as Next.js. Your proxy URL will be like `https://your-project.vercel.app/api/<path>`.
