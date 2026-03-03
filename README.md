@@ -20,31 +20,34 @@ The proxy uses the same HMAC scheme as CTIX Open API:
 - `Signature = Base64(HMAC-SHA1(secret_key, to_sign))`
 - Every request is sent with query parameters: `AccessID`, `Expires`, `Signature`.
 
+## Request verification (access_id)
+
+Every request must include **`access_id`** in the query string. It must match the configured `CTIX_ACCESS_ID` (env). If it is missing or wrong, the proxy returns `401 Unauthorized`. This lets you ensure only callers that know the access ID can use the proxy.
+
 ## Usage
 
-After deployment, call the proxy instead of CTIX directly. Replace your CTIX base URL with your Vercel URL and keep the same path.
+After deployment, call the proxy instead of CTIX directly. Replace your CTIX base URL with your Vercel URL, keep the same path, and add `access_id` to the query.
 
 **Example**
 
 - CTIX: `GET https://tenant.cyware.com/ctixapi/ingestion/threat-data/list/`
-- Proxy: `GET https://your-app.vercel.app/api/ingestion/threat-data/list/`
+- Proxy: `GET https://your-app.vercel.app/api/ingestion/threat-data/list/?access_id=YOUR_ACCESS_ID`
 
-Supported methods: `GET`, `POST`, `PUT`, `DELETE`. Request body and query parameters are forwarded; auth params are added automatically.
+Supported methods: `GET`, `POST`, `PUT`, `DELETE`. Request body and query parameters are forwarded (except `access_id`, which is only used for verification); auth params are added automatically.
 
 ## Deploy on Vercel
 
-### Option 1: Vercel CLI
+### Option 1: Vercel CLI (run in your terminal)
 
 ```bash
-cd vercel-proxy
+cd /Users/utkarsh.garg/PycharmProjects/jff/ctix-proxy/vercel-proxy
 npx vercel
 ```
 
-Follow the prompts (link to existing project or create new). For production:
+- First time: log in or sign up when prompted; choose **Create new project** or link an existing one.
+- After the first deploy, use `npx vercel --prod` to deploy to production.
 
-```bash
-npx vercel --prod
-```
+**Before the proxy works**, add env vars in the Vercel dashboard: **Project → Settings → Environment Variables** → add `CTIX_API_URL`, `CTIX_ACCESS_ID`, `CTIX_SECRET_KEY`, then redeploy.
 
 ### Option 2: Connect Git (GitHub/GitLab/Bitbucket)
 

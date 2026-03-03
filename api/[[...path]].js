@@ -1,9 +1,10 @@
 /**
  * CTIX API proxy for Vercel.
  * Forwards all requests to CTIX API with HMAC auth (AccessID, Expires, Signature).
+ * Requires access_id in the query string (must match CTIX_ACCESS_ID) to verify the request.
  *
  * Env: CTIX_API_URL, CTIX_ACCESS_ID, CTIX_SECRET_KEY
- * Usage: GET/POST/PUT/DELETE /api/<ctix-path> e.g. /api/ingestion/threat-data/list/
+ * Usage: GET/POST/PUT/DELETE /api/<ctix-path>?access_id=YOUR_ACCESS_ID
  */
 
 const { buildCtixAuthParams } = require('../lib/auth');
@@ -56,9 +57,20 @@ module.exports = async function handler(req, res) {
   }
 
   if (!CTIX_API_URL || !CTIX_ACCESS_ID || !CTIX_SECRET_KEY) {
+    console.error('[CTIX proxy] Configuration error: CTIX_API_URL, CTIX_ACCESS_ID, or CTIX_SECRET_KEY is missing in environment.');
     return res.status(500).json({
       error: 'CTIX proxy not configured',
       message: 'Set CTIX_API_URL, CTIX_ACCESS_ID, and CTIX_SECRET_KEY in environment.',
+    });
+  }
+
+  // Require access_id in URL to verify the request is valid (must match configured CTIX_ACCESS_ID)
+  const requestAccessId = req.query.access_id;
+  if (!requestAccessId || requestAccessId !== CTIX_ACCESS_ID) {
+    console.error('[CTIX proxy] Unauthorized: missing or invalid access_id in query.', { path: req.url, hasAccessId: !!requestAccessId });
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Missing or invalid access_id. Include access_id in the query string and ensure it matches the configured credential.',
     });
   }
 
@@ -66,6 +78,7 @@ module.exports = async function handler(req, res) {
   const path = getTargetPath(pathSegments);
   const searchParams = { ...req.query };
   delete searchParams.path;
+  delete searchParams.access_id; // do not forward to CTIX
 
   const targetUrl = buildTargetUrl(CTIX_API_URL, path, searchParams);
   const headers = getForwardHeaders(req);
@@ -82,6 +95,15 @@ module.exports = async function handler(req, res) {
       body: body || undefined,
     });
 
+    if (fetchRes.status >= 400) {
+      console.error('[CTIX proxy] Upstream error:', {
+        method: req.method,
+        path,
+        status: fetchRes.status,
+        statusText: fetchRes.statusText,
+      });
+    }
+
     const contentType = fetchRes.headers.get('content-type') || '';
     const data = contentType.includes('application/json')
       ? await fetchRes.json()
@@ -94,7 +116,12 @@ module.exports = async function handler(req, res) {
 
     return res.send(data);
   } catch (err) {
-    console.error('CTIX proxy error:', err.message);
+    console.error('[CTIX proxy] Proxy error:', {
+      method: req.method,
+      path,
+      error: err.message,
+      stack: err.stack,
+    });
     return res.status(502).json({
       error: 'Proxy error',
       message: err.message,
