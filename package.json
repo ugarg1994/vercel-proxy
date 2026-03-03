@@ -1,0 +1,6 @@
+{
+  "name": "ctix-proxy",
+  "version": "1.0.0",
+  "description": "Vercel serverless proxy for CTIX API with HMAC auth",
+  "private": true
+}
