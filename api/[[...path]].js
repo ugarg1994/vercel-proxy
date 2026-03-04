@@ -84,6 +84,8 @@ module.exports = async function handler(req, res) {
   delete searchParams.access_id; // do not forward to CTIX
 
   const targetUrl = buildTargetUrl(CTIX_API_URL, path, searchParams);
+  console.log('[CTIX proxy] Sending request to:', targetUrl);
+
   const headers = getForwardHeaders(req);
 
   let body;
