@@ -1,10 +1,10 @@
 /**
  * CTIX API proxy for Vercel.
  * Forwards all requests to CTIX API with HMAC auth (AccessID, Expires, Signature).
- * Requires access_id in the query string (must match CTIX_ACCESS_ID) to verify the request.
+ * Optional: set REQUIRE_ACCESS_ID=true to require access_id in query (must match CTIX_ACCESS_ID).
  *
- * Env: CTIX_API_URL, CTIX_ACCESS_ID, CTIX_SECRET_KEY
- * Usage: GET/POST/PUT/DELETE /api/<ctix-path>?access_id=YOUR_ACCESS_ID
+ * Env: CTIX_API_URL, CTIX_ACCESS_ID, CTIX_SECRET_KEY [, REQUIRE_ACCESS_ID=true]
+ * Usage: GET/POST/PUT/DELETE /api/<ctix-path> [ ?access_id=YOUR_ACCESS_ID if REQUIRE_ACCESS_ID ]
  */
 
 const { buildCtixAuthParams } = require('../lib/auth');
@@ -13,6 +13,7 @@ const CTIX_API_URL = process.env.CTIX_API_URL || '';
 const CTIX_ACCESS_ID = process.env.CTIX_ACCESS_ID || '';
 const CTIX_SECRET_KEY = process.env.CTIX_SECRET_KEY || '';
 const CTIX_API_VERSION = process.env.CTIX_API_VERSION || 'v3';
+const REQUIRE_ACCESS_ID = /^(1|true|yes)$/i.test(process.env.REQUIRE_ACCESS_ID || '');
 
 // Headers we forward to CTIX (strip host and connection, add useful ones)
 const FORWARD_HEADERS = [
@@ -64,14 +65,16 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Require access_id in URL to verify the request is valid (must match configured CTIX_ACCESS_ID)
-  const requestAccessId = req.query.access_id;
-  if (!requestAccessId || requestAccessId !== CTIX_ACCESS_ID) {
-    console.error('[CTIX proxy] Unauthorized: missing or invalid access_id in query.', { path: req.url, hasAccessId: !!requestAccessId });
-    return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Missing or invalid access_id. Include access_id in the query string and ensure it matches the configured credential.',
-    });
+  // Optional: require access_id in URL to verify the request (only when REQUIRE_ACCESS_ID is set)
+  if (REQUIRE_ACCESS_ID) {
+    const requestAccessId = req.query.access_id;
+    if (!requestAccessId || requestAccessId !== CTIX_ACCESS_ID) {
+      console.error('[CTIX proxy] Unauthorized: missing or invalid access_id in query.', { path: req.url, hasAccessId: !!requestAccessId });
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Missing or invalid access_id. Include access_id in the query string and ensure it matches the configured credential.',
+      });
+    }
   }
 
   const pathSegments = req.query.path || [];

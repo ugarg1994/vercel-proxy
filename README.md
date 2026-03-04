@@ -11,6 +11,7 @@ Set these in **Vercel → Project → Settings → Environment Variables**:
 | `CTIX_API_URL` | CTIX base URL (e.g. `https://your-tenant.cyware.com/ctixapi`) |
 | `CTIX_ACCESS_ID` | Access ID from CTIX Open API configuration |
 | `CTIX_SECRET_KEY` | Secret key from CTIX Open API configuration |
+| `REQUIRE_ACCESS_ID` | Optional. Set to `true`, `1`, or `yes` to require `access_id` in the query string (must match `CTIX_ACCESS_ID`). If unset, no access_id check is performed. |
 
 ## Auth
 
@@ -20,20 +21,21 @@ The proxy uses the same HMAC scheme as CTIX Open API:
 - `Signature = Base64(HMAC-SHA1(secret_key, to_sign))`
 - Every request is sent with query parameters: `AccessID`, `Expires`, `Signature`.
 
-## Request verification (access_id)
+## Request verification (access_id, optional)
 
-Every request must include **`access_id`** in the query string. It must match the configured `CTIX_ACCESS_ID` (env). If it is missing or wrong, the proxy returns `401 Unauthorized`. This lets you ensure only callers that know the access ID can use the proxy.
+If **`REQUIRE_ACCESS_ID`** is set to `true`, `1`, or `yes`, every request must include **`access_id`** in the query string and it must match `CTIX_ACCESS_ID`; otherwise the proxy returns `401 Unauthorized`. If `REQUIRE_ACCESS_ID` is not set, the proxy does not check `access_id` and any request is accepted.
 
 ## Usage
 
-After deployment, call the proxy instead of CTIX directly. Replace your CTIX base URL with your Vercel URL, keep the same path, and add `access_id` to the query.
+After deployment, call the proxy instead of CTIX directly. Replace your CTIX base URL with your Vercel URL and keep the same path.
 
-**Example**
+**Examples**
 
 - CTIX: `GET https://tenant.cyware.com/ctixapi/ingestion/threat-data/list/`
-- Proxy: `GET https://your-app.vercel.app/api/ingestion/threat-data/list/?access_id=YOUR_ACCESS_ID`
+- Proxy (no check): `GET https://your-app.vercel.app/api/ingestion/threat-data/list/`
+- Proxy (when `REQUIRE_ACCESS_ID=true`): `GET https://your-app.vercel.app/api/ingestion/threat-data/list/?access_id=YOUR_ACCESS_ID`
 
-Supported methods: `GET`, `POST`, `PUT`, `DELETE`. Request body and query parameters are forwarded (except `access_id`, which is only used for verification); auth params are added automatically.
+Supported methods: `GET`, `POST`, `PUT`, `DELETE`. Request body and query parameters are forwarded (except `access_id`, which is stripped and only used for verification when enabled); auth params are added automatically.
 
 ## Deploy on Vercel
 
