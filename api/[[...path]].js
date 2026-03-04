@@ -9,6 +9,18 @@
 
 const { buildCtixAuthParams } = require('../lib/auth');
 
+// Logger: write to stderr so output appears in Vercel Runtime Logs (console.log often not shown)
+const log = {
+  info: (msg, data) => {
+    const out = data != null ? `[CTIX proxy] ${msg} ${JSON.stringify(data)}` : `[CTIX proxy] ${msg}`;
+    process.stderr.write(out + '\n');
+  },
+  error: (msg, data) => {
+    const out = data != null ? `[CTIX proxy] ${msg} ${JSON.stringify(data)}` : `[CTIX proxy] ${msg}`;
+    process.stderr.write(out + '\n');
+  },
+};
+
 const CTIX_API_URL = process.env.CTIX_API_URL || '';
 const CTIX_ACCESS_ID = process.env.CTIX_ACCESS_ID || '';
 const CTIX_SECRET_KEY = process.env.CTIX_SECRET_KEY || '';
@@ -36,7 +48,9 @@ function buildTargetUrl(baseUrl, path, searchParams) {
   if (!combined.has('version')) combined.set('version', CTIX_API_VERSION);
   Object.entries(authParams).forEach(([k, v]) => combined.set(k, v));
   const query = combined.toString();
-  return query ? `${base}${pathPart}?${query}` : `${base}${pathPart}`;
+  // Use WHATWG URL API (avoids url.parse() deprecation in Node)
+  const url = new URL(pathPart + (query ? `?${query}` : ''), base);
+  return url.href;
 }
 
 function getForwardHeaders(req) {
@@ -58,7 +72,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (!CTIX_API_URL || !CTIX_ACCESS_ID || !CTIX_SECRET_KEY) {
-    console.error('[CTIX proxy] Configuration error: CTIX_API_URL, CTIX_ACCESS_ID, or CTIX_SECRET_KEY is missing in environment.');
+    log.error('Configuration error: CTIX_API_URL, CTIX_ACCESS_ID, or CTIX_SECRET_KEY is missing in environment.');
     return res.status(500).json({
       error: 'CTIX proxy not configured',
       message: 'Set CTIX_API_URL, CTIX_ACCESS_ID, and CTIX_SECRET_KEY in environment.',
@@ -69,7 +83,7 @@ module.exports = async function handler(req, res) {
   if (REQUIRE_ACCESS_ID) {
     const requestAccessId = req.query.access_id;
     if (!requestAccessId || requestAccessId !== CTIX_ACCESS_ID) {
-      console.error('[CTIX proxy] Unauthorized: missing or invalid access_id in query.', { path: req.url, hasAccessId: !!requestAccessId });
+      log.error('Unauthorized: missing or invalid access_id in query.', { path: req.url, hasAccessId: !!requestAccessId });
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Missing or invalid access_id. Include access_id in the query string and ensure it matches the configured credential.',
@@ -78,13 +92,22 @@ module.exports = async function handler(req, res) {
   }
 
   const pathSegments = req.query.path || [];
-  const path = getTargetPath(pathSegments);
+  const path = getTargetPath(pathSegments).replace(/^\//, '').trim();
+
+  if (!path) {
+    log.error('Empty path: request must include a CTIX path after /api/.', { url: req.url });
+    return res.status(400).json({
+      error: 'Bad request',
+      message: 'Missing path. Use /api/<ctix-path>, e.g. /api/ingestion/threat-data/list/',
+    });
+  }
+
   const searchParams = { ...req.query };
   delete searchParams.path;
   delete searchParams.access_id; // do not forward to CTIX
 
   const targetUrl = buildTargetUrl(CTIX_API_URL, path, searchParams);
-  console.log('[CTIX proxy] Sending request to:', targetUrl);
+  log.info('Sending request to:', { url: targetUrl });
 
   const headers = getForwardHeaders(req);
 
@@ -101,7 +124,7 @@ module.exports = async function handler(req, res) {
     });
 
     if (fetchRes.status >= 400) {
-      console.error('[CTIX proxy] Upstream error:', {
+      log.error('Upstream error:', {
         method: req.method,
         path,
         status: fetchRes.status,
@@ -121,7 +144,7 @@ module.exports = async function handler(req, res) {
 
     return res.send(data);
   } catch (err) {
-    console.error('[CTIX proxy] Proxy error:', {
+    log.error('Proxy error:', {
       method: req.method,
       path,
       error: err.message,
